@@ -1,5 +1,6 @@
 #ifndef PID_H
 #define PID_H
+#include <time.h>
 
 class PID {
 public:
@@ -41,6 +42,10 @@ public:
   * Calculate the total PID error.
   */
   double TotalError();
+
+private:
+  bool cte_initialized;
+  clock_t last_timestamp;
 };
 
 #endif /* PID_H */

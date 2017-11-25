@@ -33,9 +33,24 @@ int main()
   uWS::Hub h;
 
   PID pid;
-  // TODO: Initialize the pid variable.
+  pid = PID();
+  double pid_weights[] = {1.5e-1, 1e-4, 1.7e3};
+  double pid_weight_deltas[] = {pid_weights[0] / 20, pid_weights[1] / 10, pid_weights[2] / 5};
+  pid.Init(pid_weights[0], pid_weights[1], pid_weights[2]);
 
-  h.onMessage([&pid](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+  PID throttle_pid;
+  throttle_pid = PID();
+  throttle_pid.Init(1e-1, 1e-3, 1e1);
+
+  // variables for self-twiddling code.
+  // This would be tidier in a struct/class, but is currently experimental
+  int step_count = 0;
+  int weights_index = 0;
+  int twiddle_stage = 0;
+  double previous_max_error = 1e10;
+  double max_error = 0;
+
+  h.onMessage([&pid, &throttle_pid, &step_count, &pid_weights, &weights_index, &twiddle_stage, &max_error, &previous_max_error, &pid_weight_deltas](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -51,19 +66,80 @@ int main()
           double speed = std::stod(j[1]["speed"].get<std::string>());
           double angle = std::stod(j[1]["steering_angle"].get<std::string>());
           double steer_value;
+
+          // Quit if we crash.
+          // Useful for making sense of the log
+          // if the self-twiddling code is on.
+          if (step_count > 100 && speed < 1) exit(0);
+
+          step_count++;
+          // Experimental self-twiddling code.
+          // It works, but can lead to increased instability
+          // as it experiments.
           /*
-          * TODO: Calcuate steering value here, remember the steering value is
-          * [-1, 1].
-          * NOTE: Feel free to play around with the throttle and speed. Maybe use
-          * another PID controller to control the speed!
-          */
+          //if (fabs(cte) > max_error) max_error = fabs(cte);
+          
+          max_error += pow(cte, 2);
+          if (step_count % 600 == 0) { // approximately one loop
+            if (twiddle_stage == 0) {
+              if (max_error < previous_max_error) previous_max_error = max_error;
+              pid_weights[weights_index] += pid_weight_deltas[weights_index];
+              twiddle_stage = 1;
+
+            } else if (twiddle_stage == 1) {
+              if (max_error < previous_max_error) {
+                previous_max_error = max_error;
+                pid_weight_deltas[weights_index] *= 1.1;
+                twiddle_stage = 0;
+                weights_index++;
+                weights_index %= 3;
+
+              } else {
+                pid_weights[weights_index] -= 2 * pid_weight_deltas[weights_index];
+                twiddle_stage = 2;
+              }
+
+            } else if (twiddle_stage == 2) {
+              if (max_error < previous_max_error) {
+                previous_max_error = max_error;
+                pid_weight_deltas[weights_index] *= 1.1;
+              } else {
+                pid_weights[weights_index] += pid_weight_deltas[weights_index];
+                pid_weight_deltas[weights_index] *= 0.9;
+              }
+              twiddle_stage = 0;
+              weights_index++;
+              weights_index %= 3;
+            }
+            
+            pid.Init(pid_weights[0], pid_weights[1], pid_weights[2]);
+            std::cout << "\n\nWeights: " << pid_weights[0] << ", " << pid_weights[1] << ", " << pid_weights[2] << std::endl;
+            std::cout << "Error: " << max_error << " Best error: " << previous_max_error << std::endl;
+            max_error = 0;
+          }*/
+
+          pid.UpdateError(cte);
+          double error = pid.TotalError();
+
+          steer_value = error;
+
+          double throttle_error = 30 - speed;
+          throttle_pid.UpdateError(-throttle_error);
+          double throttle;
+          throttle = throttle_pid.TotalError();
+          //throttle = 0.3; // this was the original throttle that came from the project stub
+          
+          if (steer_value > 0.9)
+            steer_value = 0.9;
+          if (steer_value < -0.9)
+            steer_value = -0.9;
           
           // DEBUG
-          std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
+          std::cout << "Step: " << step_count << " CTE: " << cte << " Steering Value: " << steer_value << " Angle: " << angle << " Throttle: " << throttle <<  std::endl;
 
           json msgJson;
           msgJson["steering_angle"] = steer_value;
-          msgJson["throttle"] = 0.3;
+          msgJson["throttle"] = throttle;
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
           std::cout << msg << std::endl;
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
