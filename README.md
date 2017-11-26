@@ -19,16 +19,18 @@ The README at that repository has extensive details for build and setup.
 
 1. Clone this repo.
 1. `mkdir build`
+1. `cd build`
 1. `cmake .. && make && ./pid`
 
 ## Files
 [PID.cpp](https://github.com/gardenermike/pid-controller/blob/master/src/PID.cpp) implements the PID filter.
+
 [main.cpp](https://github.com/gardenermike/pid-controller/blob/master/src/main.cpp) handles websocket events, and uses an instance of the PID class for both throttle and steering.
 
 
 ## Discussion
 
-![Driving](./images/driving.png "Driving in the simulator")
+![Driving](./images/driving.gif "Driving in the simulator")
 
 Most of the interesting work in this project was done around the steering controller. The throttle was much less finicky.
 
